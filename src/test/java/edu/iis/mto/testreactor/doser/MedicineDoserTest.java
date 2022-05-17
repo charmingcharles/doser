@@ -85,9 +85,22 @@ class MedicineDoserTest {
         medicineDoser.add(medicinePackage);
         Mockito.doThrow(new InfuserException("Example message")).when(infuser).dispense(medicinePackage, capacity);
         Receipe receipe = Receipe.of(med2, dose, 1);
-        DosingResult ds = medicineDoser.dose(receipe);
+        medicineDoser.dose(receipe);
         InOrder inOrder = Mockito.inOrder(dosageLog);
         inOrder.verify(dosageLog).logDifuserError(dose, "Example message");
+    }
+
+    @Test
+    void enoughOfMedicineInOrderTest() throws InfuserException {
+        MedicinePackage medicinePackage = MedicinePackage.of(med1, Capacity.of(500, CapacityUnit.MILILITER));
+        Capacity capacity = Capacity.of(10, CapacityUnit.MILILITER);
+        Dose dose = Dose.of(capacity, Period.of(12, TimeUnit.HOURS));
+        medicineDoser.add(medicinePackage);
+        Receipe receipe = Receipe.of(med1, dose, 1);
+        medicineDoser.dose(receipe);
+        InOrder inOrder = Mockito.inOrder(dosageLog, infuser);
+        inOrder.verify(infuser).dispense(medicinePackage, capacity);
+        inOrder.verify(dosageLog).logEndDose(med1, dose);
     }
 
 }
