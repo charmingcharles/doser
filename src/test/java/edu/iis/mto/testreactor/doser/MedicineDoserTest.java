@@ -8,6 +8,7 @@ import edu.iis.mto.testreactor.doser.infuser.InfuserException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -74,6 +75,19 @@ class MedicineDoserTest {
         Receipe receipe = Receipe.of(med2, dose, 1);
         DosingResult ds = medicineDoser.dose(receipe);
         assertEquals(DosingResult.SUCCESS, ds);
+    }
+
+    @Test
+    void dispenseExceptionBehaviourTest() throws InfuserException {
+        MedicinePackage medicinePackage = MedicinePackage.of(med2, Capacity.of(500, CapacityUnit.MILILITER));
+        Capacity capacity = Capacity.of(10, CapacityUnit.MILILITER);
+        Dose dose = Dose.of(capacity, Period.of(12, TimeUnit.HOURS));
+        medicineDoser.add(medicinePackage);
+        Mockito.doThrow(new InfuserException("Example message")).when(infuser).dispense(medicinePackage, capacity);
+        Receipe receipe = Receipe.of(med2, dose, 1);
+        DosingResult ds = medicineDoser.dose(receipe);
+        InOrder inOrder = Mockito.inOrder(dosageLog);
+        inOrder.verify(dosageLog).logDifuserError(dose, "Example message");
     }
 
 }
