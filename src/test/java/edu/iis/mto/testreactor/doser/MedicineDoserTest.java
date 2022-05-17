@@ -86,7 +86,9 @@ class MedicineDoserTest {
         Mockito.doThrow(new InfuserException("Example message")).when(infuser).dispense(medicinePackage, capacity);
         Receipe receipe = Receipe.of(med2, dose, 1);
         medicineDoser.dose(receipe);
-        InOrder inOrder = Mockito.inOrder(dosageLog);
+        InOrder inOrder = Mockito.inOrder(dosageLog, infuser);
+        inOrder.verify(dosageLog).logStartDose(med2, dose);
+        inOrder.verify(infuser).dispense(medicinePackage, capacity);
         inOrder.verify(dosageLog).logDifuserError(dose, "Example message");
     }
 
@@ -98,9 +100,28 @@ class MedicineDoserTest {
         medicineDoser.add(medicinePackage);
         Receipe receipe = Receipe.of(med1, dose, 1);
         medicineDoser.dose(receipe);
-        InOrder inOrder = Mockito.inOrder(dosageLog, infuser);
+        InOrder inOrder = Mockito.inOrder(dosageLog, infuser, clock);
+        inOrder.verify(dosageLog).logStart();
+        inOrder.verify(dosageLog).logStartDose(med1, dose);
         inOrder.verify(infuser).dispense(medicinePackage, capacity);
         inOrder.verify(dosageLog).logEndDose(med1, dose);
+        inOrder.verify(clock).wait(receipe.getDose().getPeriod());
+    }
+
+    @Test
+    void enoughOfMedicineFewNumbersInOrderTest() throws InfuserException {
+        MedicinePackage medicinePackage = MedicinePackage.of(med1, Capacity.of(500, CapacityUnit.MILILITER));
+        Capacity capacity = Capacity.of(10, CapacityUnit.MILILITER);
+        Dose dose = Dose.of(capacity, Period.of(12, TimeUnit.HOURS));
+        medicineDoser.add(medicinePackage);
+        Receipe receipe = Receipe.of(med1, dose, 4);
+        medicineDoser.dose(receipe);
+        InOrder inOrder = Mockito.inOrder(dosageLog, infuser, clock);
+        inOrder.verify(dosageLog, Mockito.times(1)).logStart();
+        inOrder.verify(dosageLog, Mockito.times(4)).logStartDose(med1, dose);
+        inOrder.verify(infuser, Mockito.times(4)).dispense(medicinePackage, capacity);
+        inOrder.verify(dosageLog, Mockito.times(4)).logEndDose(med1, dose);
+        inOrder.verify(clock, Mockito.times(4)).wait(receipe.getDose().getPeriod());
     }
 
 }
