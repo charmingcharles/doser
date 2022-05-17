@@ -1,6 +1,7 @@
 package edu.iis.mto.testreactor.doser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import edu.iis.mto.testreactor.doser.infuser.Infuser;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,4 +41,17 @@ class MedicineDoserTest {
         DosingResult ds = medicineDoser.dose(receipe);
         assertEquals(ds, DosingResult.SUCCESS);
     }
+
+    @Test
+    void notEnoughOfMedicineTest() {
+        Medicine medicine = Medicine.of("Diltiazem");
+        Dose dose = Dose.of(Capacity.of(10, CapacityUnit.MILILITER), Period.of(12, TimeUnit.HOURS));
+        medicineDoser.add(MedicinePackage.of(medicine, Capacity.of(5, CapacityUnit.MILILITER)));
+        Receipe receipe = Receipe.of(medicine, dose, 1);
+        InsufficientMedicineException exception = assertThrows(InsufficientMedicineException.class, () -> medicineDoser.dose(receipe));
+        assertEquals(exception.getMedicine(), medicine);
+    }
+
+
+
 }
