@@ -5,11 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import edu.iis.mto.testreactor.doser.infuser.Infuser;
 import edu.iis.mto.testreactor.doser.infuser.InfuserException;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
+import static org.mockito.Mockito.*;
+
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -29,9 +32,13 @@ class MedicineDoserTest {
     @Mock
     Clock clock;
 
-    Medicine med1 = Medicine.of("Diltiazem");
-    Medicine med2 = Medicine.of("Abatacept");
+    Medicine pills = Medicine.of("Pills");
+    Medicine syrup = Medicine.of("Syrup");
 
+    Capacity capacity100 = Capacity.of(100, CapacityUnit.MILILITER);
+
+    Period period12 = Period.of(12, TimeUnit.HOURS);
+    Period period24 = Period.of(1, TimeUnit.DAYS);
 
     @BeforeEach
     void setUp(){
@@ -39,89 +46,131 @@ class MedicineDoserTest {
     }
 
     @Test
-    void enoughOfMedicineTest() {
-        Dose dose = Dose.of(Capacity.of(10, CapacityUnit.MILILITER), Period.of(12, TimeUnit.HOURS));
-        medicineDoser.add(MedicinePackage.of(med1, Capacity.of(1000, CapacityUnit.MILILITER)));
-        Receipe receipe = Receipe.of(med1, dose, 1);
-        DosingResult ds = medicineDoser.dose(receipe);
-        assertEquals(ds, DosingResult.SUCCESS);
+    void onePillEvery12HoursTest(){
+        Receipe pillsRecipe = Receipe.of(pills, Dose.of(capacity100, period12), 1);
+        medicineDoser.add(MedicinePackage.of(pills, Capacity.of(12, CapacityUnit.LITER)));
+        DosingResult result = medicineDoser.dose(pillsRecipe);
+        assertEquals(DosingResult.SUCCESS, result);
     }
 
     @Test
-    void notEnoughOfMedicineTest() {
-        Dose dose = Dose.of(Capacity.of(10, CapacityUnit.MILILITER), Period.of(12, TimeUnit.HOURS));
-        medicineDoser.add(MedicinePackage.of(med1, Capacity.of(5, CapacityUnit.MILILITER)));
-        Receipe receipe = Receipe.of(med1, dose, 1);
-        InsufficientMedicineException exception = assertThrows(InsufficientMedicineException.class, () -> medicineDoser.dose(receipe));
-        assertEquals(exception.getMedicine(), med1);
+    void verifyThreePillsEvery12HoursTest(){
+        Receipe pillsRecipe = Receipe.of(pills, Dose.of(capacity100, period12), 3);
+        medicineDoser.add(MedicinePackage.of(pills, Capacity.of(12, CapacityUnit.LITER)));
+        DosingResult result = medicineDoser.dose(pillsRecipe);
+        assertEquals(DosingResult.SUCCESS, result);
+        Mockito.verify(clock, Mockito.times(3)).wait(period12);
     }
 
     @Test
-    void notThisMedicineTest() {
-        Dose dose = Dose.of(Capacity.of(10, CapacityUnit.MILILITER), Period.of(12, TimeUnit.HOURS));
-        medicineDoser.add(MedicinePackage.of(med2, Capacity.of(5, CapacityUnit.MILILITER)));
-        Receipe receipe = Receipe.of(med1, dose, 1);
-        UnavailableMedicineException exception = assertThrows(UnavailableMedicineException.class, () -> medicineDoser.dose(receipe));
-        assertEquals(exception.getMedicine(), med1);
+    void twoPillsAndSyrupEvery24HoursTest(){
+        Receipe pillsRecipe = Receipe.of(pills, Dose.of(capacity100, period24), 2);
+        Receipe syrupRecipe = Receipe.of(syrup, Dose.of(capacity100, period24), 1);
+        medicineDoser.add(MedicinePackage.of(pills, Capacity.of(12, CapacityUnit.LITER)));
+        medicineDoser.add(MedicinePackage.of(syrup, Capacity.of(1200, CapacityUnit.MILILITER)));
+        DosingResult result1 = medicineDoser.dose(pillsRecipe);
+        DosingResult result2 = medicineDoser.dose(syrupRecipe);
+        assertEquals(DosingResult.SUCCESS, result1);
+        assertEquals(DosingResult.SUCCESS, result2);
     }
 
     @Test
-    void dispenseExceptionTest() throws InfuserException {
-        MedicinePackage medicinePackage = MedicinePackage.of(med2, Capacity.of(500, CapacityUnit.MILILITER));
-        Capacity capacity = Capacity.of(10, CapacityUnit.MILILITER);
-        Dose dose = Dose.of(capacity, Period.of(12, TimeUnit.HOURS));
+    void notEnoughPillsTest(){
+        Receipe pillsRecipe = Receipe.of(pills, Dose.of(capacity100, period12), 1);
+        medicineDoser.add(MedicinePackage.of(pills, Capacity.of(50, CapacityUnit.MILILITER)));
+        MedicineException exception = Assertions.assertThrows(InsufficientMedicineException.class, () -> medicineDoser.dose(pillsRecipe));
+        assertEquals(exception.getMedicine(), pills);
+    }
+
+    @Test
+    void noSyrupTest(){
+        Receipe pillsRecipe = Receipe.of(syrup, Dose.of(capacity100, period12), 2);
+        medicineDoser.add(MedicinePackage.of(pills, Capacity.of(50, CapacityUnit.LITER)));
+        MedicineException exception = Assertions.assertThrows(UnavailableMedicineException.class, () -> medicineDoser.dose(pillsRecipe));
+        assertEquals(exception.getMedicine(), syrup);
+    }
+
+    @Test
+    void correctOrderTest() throws InfuserException {
+        Receipe pillsRecipe = Receipe.of(pills, Dose.of(capacity100, period12), 1);
+        MedicinePackage medicinePackage = MedicinePackage.of(pills, Capacity.of(12, CapacityUnit.LITER));
         medicineDoser.add(medicinePackage);
-        Mockito.doThrow(new InfuserException()).when(infuser).dispense(medicinePackage, capacity);
-        Receipe receipe = Receipe.of(med2, dose, 1);
-        DosingResult ds = medicineDoser.dose(receipe);
-        assertEquals(DosingResult.SUCCESS, ds);
-    }
-
-    @Test
-    void dispenseExceptionBehaviourTest() throws InfuserException {
-        MedicinePackage medicinePackage = MedicinePackage.of(med2, Capacity.of(500, CapacityUnit.MILILITER));
-        Capacity capacity = Capacity.of(10, CapacityUnit.MILILITER);
-        Dose dose = Dose.of(capacity, Period.of(12, TimeUnit.HOURS));
-        medicineDoser.add(medicinePackage);
-        Mockito.doThrow(new InfuserException("Example message")).when(infuser).dispense(medicinePackage, capacity);
-        Receipe receipe = Receipe.of(med2, dose, 1);
-        medicineDoser.dose(receipe);
-        InOrder inOrder = Mockito.inOrder(dosageLog, infuser);
-        inOrder.verify(dosageLog).logStartDose(med2, dose);
-        inOrder.verify(infuser).dispense(medicinePackage, capacity);
-        inOrder.verify(dosageLog).logDifuserError(dose, "Example message");
-    }
-
-    @Test
-    void enoughOfMedicineInOrderTest() throws InfuserException {
-        MedicinePackage medicinePackage = MedicinePackage.of(med1, Capacity.of(500, CapacityUnit.MILILITER));
-        Capacity capacity = Capacity.of(10, CapacityUnit.MILILITER);
-        Dose dose = Dose.of(capacity, Period.of(12, TimeUnit.HOURS));
-        medicineDoser.add(medicinePackage);
-        Receipe receipe = Receipe.of(med1, dose, 1);
-        medicineDoser.dose(receipe);
-        InOrder inOrder = Mockito.inOrder(dosageLog, infuser, clock);
+        medicineDoser.dose(pillsRecipe);
+        InOrder inOrder = Mockito.inOrder(infuser, dosageLog, clock);
         inOrder.verify(dosageLog).logStart();
-        inOrder.verify(dosageLog).logStartDose(med1, dose);
-        inOrder.verify(infuser).dispense(medicinePackage, capacity);
-        inOrder.verify(dosageLog).logEndDose(med1, dose);
-        inOrder.verify(clock).wait(receipe.getDose().getPeriod());
+        inOrder.verify(dosageLog).logStartDose(pills, Dose.of(capacity100, period12));
+        inOrder.verify(infuser).dispense(medicinePackage, capacity100);
+        inOrder.verify(dosageLog).logEndDose(pills, Dose.of(capacity100, period12));
+        inOrder.verify(clock).wait(period12);
+        inOrder.verify(dosageLog).logEnd();
     }
 
     @Test
-    void enoughOfMedicineFewNumbersInOrderTest() throws InfuserException {
-        MedicinePackage medicinePackage = MedicinePackage.of(med1, Capacity.of(500, CapacityUnit.MILILITER));
-        Capacity capacity = Capacity.of(10, CapacityUnit.MILILITER);
-        Dose dose = Dose.of(capacity, Period.of(12, TimeUnit.HOURS));
+    void timesRunTest() throws InfuserException {
+        Receipe pillsRecipe = Receipe.of(pills, Dose.of(capacity100, period12), 1);
+        MedicinePackage medicinePackage = MedicinePackage.of(pills, Capacity.of(12, CapacityUnit.LITER));
         medicineDoser.add(medicinePackage);
-        Receipe receipe = Receipe.of(med1, dose, 4);
-        medicineDoser.dose(receipe);
-        InOrder inOrder = Mockito.inOrder(dosageLog, infuser, clock);
-        inOrder.verify(dosageLog, Mockito.times(1)).logStart();
-        inOrder.verify(dosageLog, Mockito.times(4)).logStartDose(med1, dose);
-        inOrder.verify(infuser, Mockito.times(4)).dispense(medicinePackage, capacity);
-        inOrder.verify(dosageLog, Mockito.times(4)).logEndDose(med1, dose);
-        inOrder.verify(clock, Mockito.times(4)).wait(receipe.getDose().getPeriod());
+        medicineDoser.dose(pillsRecipe);
+        Mockito.verify(dosageLog).logStart();
+        Mockito.verify(dosageLog).logStartDose(pills, Dose.of(capacity100, period12));
+        Mockito.verify(infuser).dispense(medicinePackage, capacity100);
+        Mockito.verify(dosageLog).logEndDose(pills, Dose.of(capacity100, period12));
+        Mockito.verify(clock).wait(period12);
+        Mockito.verify(dosageLog).logEnd();
+    }
+
+    @Test
+    void threeTimesRunTest() throws InfuserException {
+        Receipe pillsRecipe = Receipe.of(pills, Dose.of(capacity100, period12), 3);
+        MedicinePackage medicinePackage = MedicinePackage.of(pills, Capacity.of(12, CapacityUnit.LITER));
+        medicineDoser.add(medicinePackage);
+        medicineDoser.dose(pillsRecipe);
+        Mockito.verify(dosageLog, Mockito.times(1)).logStart();
+        Mockito.verify(dosageLog, Mockito.times(3)).logStartDose(pills, Dose.of(capacity100, period12));
+        Mockito.verify(infuser, Mockito.times(3)).dispense(medicinePackage, capacity100);
+        Mockito.verify(dosageLog, Mockito.times(3)).logEndDose(pills, Dose.of(capacity100, period12));
+        Mockito.verify(clock, Mockito.times(3)).wait(period12);
+        Mockito.verify(dosageLog, Mockito.times(1)).logEnd();
+    }
+
+    @Test
+    void twoPillsAndSyrupEvery24HoursVerifyTest() throws InfuserException {
+        Dose dose24 = Dose.of(capacity100, period24);
+        Receipe pillsRecipe = Receipe.of(pills, dose24, 2);
+        Receipe syrupRecipe = Receipe.of(syrup, dose24, 1);
+        MedicinePackage pillsPackage = MedicinePackage.of(pills, Capacity.of(12, CapacityUnit.LITER));
+        MedicinePackage syrupPackage = MedicinePackage.of(syrup, Capacity.of(1200, CapacityUnit.MILILITER));
+        medicineDoser.add(pillsPackage);
+        medicineDoser.add(syrupPackage);
+        medicineDoser.dose(pillsRecipe);
+        medicineDoser.dose(syrupRecipe);
+        InOrder inOrder = Mockito.inOrder(infuser, dosageLog, clock);
+        inOrder.verify(dosageLog).logStart();
+        inOrder.verify(dosageLog).logStartDose(pills, dose24);
+        inOrder.verify(infuser).dispense(pillsPackage, capacity100);
+        inOrder.verify(dosageLog).logEndDose(pills, dose24);
+        inOrder.verify(clock).wait(period24);
+        inOrder.verify(dosageLog).logStartDose(syrup, dose24);
+        inOrder.verify(infuser).dispense(syrupPackage, capacity100);
+        inOrder.verify(dosageLog).logEndDose(syrup, dose24);
+        inOrder.verify(clock).wait(period24);
+        inOrder.verify(dosageLog).logEnd();
+    }
+
+    @Test
+    void catchExceptionInfuserTest() throws InfuserException {
+        Receipe pillsRecipe = Receipe.of(pills, Dose.of(capacity100, period12), 1);
+        MedicinePackage medicinePackage = MedicinePackage.of(pills, Capacity.of(12, CapacityUnit.LITER));
+        Mockito.doThrow(InfuserException.class).when(infuser).dispense(medicinePackage, capacity100);
+        medicineDoser.add(medicinePackage);
+        medicineDoser.dose(pillsRecipe);
+        InOrder inOrder = Mockito.inOrder(infuser, dosageLog, clock);
+        inOrder.verify(dosageLog).logStart();
+        inOrder.verify(dosageLog).logStartDose(pills, Dose.of(capacity100, period12));
+        inOrder.verify(infuser).dispense(medicinePackage, capacity100);
+        inOrder.verify(dosageLog).logDifuserError(Dose.of(capacity100, period12), new InfuserException().getMessage());
+        inOrder.verify(clock).wait(period12);
+        inOrder.verify(dosageLog).logEnd();
     }
 
 }
